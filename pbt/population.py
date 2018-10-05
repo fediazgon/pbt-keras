@@ -14,18 +14,15 @@ class Member:
         self.model = self._create_model()
         self.model.compile(
             optimizer='adam',
-            loss='sparse_categorical_crossentropy',
-            metrics=['accuracy'])
+            loss='mean_squared_error')
 
     def _create_model(self):
         model = keras.models.Sequential([
-            keras.layers.Flatten(),
-            keras.layers.Dense(512,
+            keras.layers.Dense(64,
                                activation='relu',
                                kernel_regularizer=self.regularizer),
             keras.layers.Dropout(0.2),
-            keras.layers.Dense(10,
-                               activation='softmax',
+            keras.layers.Dense(1,
                                kernel_regularizer=self.regularizer)
         ])
         return model
@@ -33,20 +30,27 @@ class Member:
     def step(self):
         """Step of gradient descent with Adam on model weights."""
         x, y = self.batch_generator.next()
-        train_loss, train_accuracy = self.model.train_on_batch(x, y)
+        train_loss = self.model.train_on_batch(x, y)
         self.total_steps += 1
-        return train_loss, train_accuracy
+        return train_loss
 
     def explore(self):
-        """Randomly perturb regularization by a factor of 0.8 or 1.2"""
+        """Randomly perturb regularization by a factor of 0.8 or 1.2."""
         factors = [0.8, 1.2]
         self.regularizer.perturb(factors)
 
     def replace_with(self, member):
         """Replace the hyperparameters and weights of this member of with the
-        hyperparameters and the wights of the given member."""
+        hyperparameters and the weights of the given member."""
         self.model.set_weights(member.model.get_weights())
         self.regularizer.replace_with(member.regularizer)
+
+    def eval(self):
+        """Evaluate the current model by computing the loss on the validation
+        set."""
+        x, y = self.batch_generator.val()
+        eval_loss = self.model.evaluate(x, y, verbose=0)
+        return eval_loss
 
 
 class BatchGenerator:
@@ -72,3 +76,6 @@ class BatchGenerator:
             batch_y = self.y_train[first_index:]
             self.k = 0
         return batch_x, batch_y
+
+    def val(self):
+        return self.x_test, self.y_test
