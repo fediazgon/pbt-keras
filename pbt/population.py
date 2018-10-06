@@ -5,8 +5,10 @@ from pbt.hyperparameters import L1L2Mutable
 
 class Member:
 
-    def __init__(self, batch_generator):
+    def __init__(self, batch_generator, steps_to_ready):
         self.batch_generator = batch_generator
+
+        self.steps_remaining_ready = self.steps_to_ready = steps_to_ready
         self.total_steps = 0
 
         self.regularizer = L1L2Mutable(l1=1e-5, l2=1e-5)
@@ -32,7 +34,25 @@ class Member:
         x, y = self.batch_generator.next()
         train_loss = self.model.train_on_batch(x, y)
         self.total_steps += 1
+        self.steps_remaining_ready -= 1
         return train_loss
+
+    def eval(self):
+        """Evaluate the current model by computing the loss on the validation
+        set."""
+        x, y = self.batch_generator.val()
+        eval_loss = self.model.evaluate(x, y, verbose=0)
+        return eval_loss
+
+    def ready(self):
+        """Returns if the member of the population is considered ready to
+        exploit and explore"""
+        # In case the user call step twice just when the model is ready
+        if self.steps_remaining_ready <= 0:
+            self.steps_remaining_ready = self.steps_to_ready
+            return True
+        else:
+            return False
 
     def explore(self):
         """Randomly perturb regularization by a factor of 0.8 or 1.2."""
@@ -44,13 +64,6 @@ class Member:
         hyperparameters and the weights of the given member."""
         self.model.set_weights(member.model.get_weights())
         self.regularizer.replace_with(member.regularizer)
-
-    def eval(self):
-        """Evaluate the current model by computing the loss on the validation
-        set."""
-        x, y = self.batch_generator.val()
-        eval_loss = self.model.evaluate(x, y, verbose=0)
-        return eval_loss
 
 
 class BatchGenerator:

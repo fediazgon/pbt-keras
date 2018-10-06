@@ -6,6 +6,8 @@ from keras import backend as K
 
 from pbt.population import Member, BatchGenerator
 
+STEPS_TO_READY = 5
+
 DATASET = tf.keras.datasets.boston_housing
 TRAIN_DATASET_SIZE = 404  # Use all
 TEST_DATASET_SIZE = 102  # Use all
@@ -49,29 +51,51 @@ class TestsPbtMethods(unittest.TestCase):
     def create_batch_generator(self):
         return BatchGenerator(self.x_train, self.y_train,
                               self.x_test, self.y_test, batch_size=BATCH_SIZE)
+    
+    def create_test_member(self):
+        return Member(self.create_batch_generator(), STEPS_TO_READY)
 
     def test_step(self):
         """Training two members of the population with the same parameters."""
-        ma = Member(self.create_batch_generator())
+        ma = self.create_test_member()
         loss_a = ma.step()
         ma_reg_config = ma.regularizer.get_config()
         self.close_current_session()
         self.start_nonrandom_session()
-        mb = Member(self.create_batch_generator())
+        mb = self.create_test_member()
         loss_b = mb.step()
         mb_reg_config = mb.regularizer.get_config()
         self.assertDictEqual(ma_reg_config, mb_reg_config)
         self.assertEqual(loss_a, loss_b)
 
+    def test_eval(self):
+        """Training one model for a few steps to evaluate the performance."""
+        ma = self.create_test_member()
+        loss_1 = ma.eval()
+        for i in range(5):
+            ma.step()
+        loss_n = ma.eval()
+        self.assertLess(loss_n, loss_1)
+
+    def test_ready(self):
+        """Train one model for the required number of steps to be ready."""
+        ma = self.create_test_member()
+        self.assertFalse(ma.ready())
+        for i in range(STEPS_TO_READY):
+            ma.step()
+        self.assertTrue(ma.ready())
+        ma.step()
+        self.assertFalse(ma.ready())
+
     def test_explore(self):
         """Training two members of the population. Calling 'explore' in one."""
-        ma = Member(self.create_batch_generator())
+        ma = self.create_test_member()
         ma.step()
         loss_a = ma.step()
         ma_reg_config = ma.regularizer.get_config()
         self.close_current_session()
         self.start_nonrandom_session()
-        mb = Member(self.create_batch_generator())
+        mb = self.create_test_member()
         mb.explore()
         loss_b = mb.step()
         mb_reg_config = mb.regularizer.get_config()
@@ -81,8 +105,8 @@ class TestsPbtMethods(unittest.TestCase):
 
     def test_replace(self):
         """Replacing the hyperparameters and weights of one model."""
-        ma = Member(self.create_batch_generator())
-        mb = Member(self.create_batch_generator())
+        ma = self.create_test_member()
+        mb = self.create_test_member()
         loss_a = ma.step()
         loss_b = mb.step()
         self.assertRaises(AssertionError, np.testing.assert_array_equal,
@@ -94,12 +118,3 @@ class TestsPbtMethods(unittest.TestCase):
                                       mb.model.get_weights())
         self.assertDictEqual(ma.regularizer.get_config(),
                              mb.regularizer.get_config())
-
-    def test_eval(self):
-        """Training one model for a few steps to evaluate the performance."""
-        ma = Member(self.create_batch_generator())
-        loss_1 = ma.eval()
-        for i in range(5):
-            ma.step()
-        loss_n = ma.eval()
-        self.assertLess(loss_n, loss_1)
