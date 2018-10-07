@@ -1,4 +1,5 @@
 import keras
+import numpy as np
 
 from pbt.hyperparameters import L1L2Mutable
 
@@ -11,6 +12,7 @@ class Member:
         self.steps_remaining_ready = self.steps_to_ready = steps_to_ready
         self.total_steps = 0
 
+        self.last_loss = 0
         self.regularizer = L1L2Mutable(l1=1e-5, l2=1e-5)
 
         self.model = self._create_model()
@@ -42,6 +44,7 @@ class Member:
         set."""
         x, y = self.batch_generator.val()
         eval_loss = self.model.evaluate(x, y, verbose=0)
+        self.last_loss = eval_loss
         return eval_loss
 
     def ready(self):
@@ -64,6 +67,21 @@ class Member:
         hyperparameters and the weights of the given member."""
         self.model.set_weights(member.model.get_weights())
         self.regularizer.replace_with(member.regularizer)
+
+
+def exploit(population):
+    """Truncation selection: rank all the agents in the population by loss.
+    If the current agent is in the bottom 20% of the population, we sample
+    another agent uniformly from the top 20% of the population, and copy its
+    weights and hyperparameters."""
+    losses = np.array([member.last_loss for member in population])
+    threshold_best, threshold_worst = np.percentile(losses, [20, 80])
+    top_performers = [member for member in population
+                      if member.last_loss < threshold_best]
+    for member in population:
+        if member.last_loss > threshold_worst:
+            top_member = np.random.choice(top_performers)
+            member.replace_with(top_member)
 
 
 class BatchGenerator:

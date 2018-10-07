@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 
-from pbt.population import Member, BatchGenerator
+from pbt.population import Member, exploit, BatchGenerator
 
 STEPS_TO_READY = 5
 
@@ -51,7 +51,7 @@ class TestsPbtMethods(unittest.TestCase):
     def create_batch_generator(self):
         return BatchGenerator(self.x_train, self.y_train,
                               self.x_test, self.y_test, batch_size=BATCH_SIZE)
-    
+
     def create_test_member(self):
         return Member(self.create_batch_generator(), STEPS_TO_READY)
 
@@ -86,6 +86,31 @@ class TestsPbtMethods(unittest.TestCase):
         self.assertTrue(ma.ready())
         ma.step()
         self.assertFalse(ma.ready())
+
+    def test_exploit(self):
+        """Train a population and check that worst members are replaced."""
+        population_size = 2
+        # if we increase the size, we cannot predict which one is going to
+        # replaced or not
+        population = []
+        for i in range(population_size):
+            population.append(self.create_test_member())
+
+        # Make the loss of one the members significantly lower than the rest
+        member_best = population[0]
+        for i in range(5):
+            member_best.step()
+
+        # Call eval to update 'last_loss' in members
+        for member in population:
+            member.eval()
+
+        exploit(population)
+        for member in population:
+            self.assert_list_arrays_equal(member.model.get_weights(),
+                                          member_best.model.get_weights())
+            self.assertDictEqual(member.regularizer.get_config(),
+                                 member_best.regularizer.get_config())
 
     def test_explore(self):
         """Training two members of the population. Calling 'explore' in one."""
