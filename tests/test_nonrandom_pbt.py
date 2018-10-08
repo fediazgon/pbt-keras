@@ -1,17 +1,22 @@
 import unittest
 
+import keras
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
 
 from pbt.population import Member, exploit, BatchGenerator
 
+DATASET = tf.keras.datasets.boston_housing
+
+BATCH_SIZE = 64
 STEPS_TO_READY = 5
 
-DATASET = tf.keras.datasets.boston_housing
-TRAIN_DATASET_SIZE = 404  # Use all
-TEST_DATASET_SIZE = 102  # Use all
-BATCH_SIZE = 64
+TEST_MODEL = keras.models.Sequential([
+    keras.layers.Dense(64, activation='relu'),
+    keras.layers.Dropout(0.2),
+    keras.layers.Dense(1)
+])
 
 config = tf.ConfigProto(intra_op_parallelism_threads=1,
                         inter_op_parallelism_threads=1)
@@ -22,10 +27,8 @@ class TestsPbtMethods(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         (x_train, y_train), (x_test, y_test) = DATASET.load_data()
-        cls.x_train = x_train[:TRAIN_DATASET_SIZE]
-        cls.y_train = y_train[:TRAIN_DATASET_SIZE]
-        cls.x_test = x_test[:TEST_DATASET_SIZE]
-        cls.y_test = y_test[:TEST_DATASET_SIZE]
+        cls.x_train, cls.y_train = x_train, y_train
+        cls.x_test, cls.y_test = x_test, y_test
 
     def start_nonrandom_session(self):
         np.random.seed(42)
@@ -48,12 +51,12 @@ class TestsPbtMethods(unittest.TestCase):
     def tearDown(self):
         self.close_current_session()
 
-    def create_batch_generator(self):
-        return BatchGenerator(self.x_train, self.y_train,
-                              self.x_test, self.y_test, batch_size=BATCH_SIZE)
-
     def create_test_member(self):
-        return Member(self.create_batch_generator(), STEPS_TO_READY)
+        return Member(TEST_MODEL,
+                      BatchGenerator(self.x_train, self.y_train,
+                                     self.x_test, self.y_test,
+                                     batch_size=BATCH_SIZE),
+                      STEPS_TO_READY)
 
     def test_step(self):
         """Training two members of the population with the same parameters."""

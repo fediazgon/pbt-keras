@@ -1,35 +1,32 @@
 import keras
 import numpy as np
+from keras.layers import Dense, Conv1D, Conv2D, Conv3D
 
 from pbt.hyperparameters import L1L2Mutable
 
 
 class Member:
 
-    def __init__(self, batch_generator, steps_to_ready):
+    def __init__(self, model, batch_generator, steps_to_ready):
         self.batch_generator = batch_generator
 
         self.steps_remaining_ready = self.steps_to_ready = steps_to_ready
         self.total_steps = 0
 
         self.last_loss = 0
-        self.regularizer = L1L2Mutable(l1=1e-5, l2=1e-5)
 
-        self.model = self._create_model()
+        self.regularizer = L1L2Mutable(l1=1e-5, l2=1e-5)
+        self.model = keras.models.clone_model(model)
+        self._set_kernel_regularizer()
+
         self.model.compile(
             optimizer='adam',
             loss='mean_squared_error')
 
-    def _create_model(self):
-        model = keras.models.Sequential([
-            keras.layers.Dense(64,
-                               activation='relu',
-                               kernel_regularizer=self.regularizer),
-            keras.layers.Dropout(0.2),
-            keras.layers.Dense(1,
-                               kernel_regularizer=self.regularizer)
-        ])
-        return model
+    def _set_kernel_regularizer(self):
+        for layer in self.model.layers:
+            if isinstance(layer, (Dense, Conv1D, Conv2D, Conv3D)):
+                layer.kernel_regularizer = self.regularizer
 
     def step(self):
         """Step of gradient descent with Adam on model weights."""
@@ -75,6 +72,7 @@ def exploit(population):
     another agent uniformly from the top 20% of the population, and copy its
     weights and hyperparameters."""
     losses = np.array([member.last_loss for member in population])
+    # Lower is better. Top 20% means percentile 20 in losses
     threshold_best, threshold_worst = np.percentile(losses, [20, 80])
     top_performers = [member for member in population
                       if member.last_loss < threshold_best]
