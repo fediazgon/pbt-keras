@@ -40,10 +40,14 @@ class TestsPbtMethods(unittest.TestCase):
         K.clear_session()
         self.session.close()
 
-    @staticmethod
-    def assert_list_arrays_equal(list_a, list_b):
+    def assert_list_arrays_equal(self, list_a, list_b):
         for i in range(len(list_a)):
             np.testing.assert_array_equal(list_a[i], list_b[i])
+
+    def assert_list_arrays_not_equal(self, list_a, list_b):
+        with self.assertRaises(AssertionError):
+            for i in range(len(list_a)):
+                np.testing.assert_array_equal(list_a[i], list_b[i])
 
     def setUp(self):
         self.start_nonrandom_session()
@@ -92,23 +96,17 @@ class TestsPbtMethods(unittest.TestCase):
 
     def test_exploit(self):
         """Train a population and check that worst members are replaced."""
-        population_size = 2
-        # if we increase the size, we cannot predict which one is going to
-        # replaced or not
-        population = []
-        for i in range(population_size):
-            population.append(self.create_test_member())
-
+        member_best = self.create_test_member()
+        member_worst = self.create_test_member()
+        population = [member_best, member_worst]
         # Make the loss of one the members significantly lower than the rest
-        member_best = population[0]
-        for i in range(5):
+        for i in range(20):
             member_best.step()
-
         # Call eval to update 'last_loss' in members
         for member in population:
             member.eval()
-
-        exploit(population)
+        # Consider 'member_worst' is ready
+        exploit(member_worst, population)
         for member in population:
             self.assert_list_arrays_equal(member.model.get_weights(),
                                           member_best.model.get_weights())
@@ -137,12 +135,12 @@ class TestsPbtMethods(unittest.TestCase):
         mb = self.create_test_member()
         loss_a = ma.step()
         loss_b = mb.step()
-        self.assertRaises(AssertionError, np.testing.assert_array_equal,
-                          ma.model.get_weights(),
-                          mb.model.get_weights())
+        self.assert_list_arrays_not_equal(ma.model.get_weights(),
+                                          mb.model.get_weights())
         self.assertNotEqual(loss_a, loss_b)
         ma.replace_with(mb)
         self.assert_list_arrays_equal(ma.model.get_weights(),
                                       mb.model.get_weights())
         self.assertDictEqual(ma.regularizer.get_config(),
+
                              mb.regularizer.get_config())

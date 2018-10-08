@@ -1,8 +1,12 @@
+import logging
+
 import keras
 import numpy as np
 from keras.layers import Dense, Conv1D, Conv2D, Conv3D
 
 from pbt.hyperparameters import L1L2Mutable
+
+log = logging.getLogger(__name__)
 
 
 class Member:
@@ -54,6 +58,9 @@ class Member:
         else:
             return False
 
+    def __str__(self):
+        return str(id(self))
+
     def explore(self):
         """Randomly perturb regularization by a factor of 0.8 or 1.2."""
         factors = [0.8, 1.2]
@@ -66,20 +73,22 @@ class Member:
         self.regularizer.replace_with(member.regularizer)
 
 
-def exploit(population):
+def exploit(member, population):
     """Truncation selection: rank all the agents in the population by loss.
     If the current agent is in the bottom 20% of the population, we sample
     another agent uniformly from the top 20% of the population, and copy its
     weights and hyperparameters."""
-    losses = np.array([member.last_loss for member in population])
+    log.debug('Exploit. Deciding fate of member {}'.format("a"))
+    losses = np.array([m.last_loss for m in population])
     # Lower is better. Top 20% means percentile 20 in losses
     threshold_best, threshold_worst = np.percentile(losses, [20, 80])
-    top_performers = [member for member in population
-                      if member.last_loss < threshold_best]
-    for member in population:
-        if member.last_loss > threshold_worst:
-            top_member = np.random.choice(top_performers)
-            member.replace_with(top_member)
+    log.debug('Top 20 loss is {:f}, bottom 20 is {:f}, member loss is {:f}'
+              .format(threshold_best, threshold_worst, member.last_loss))
+    if member.last_loss > threshold_worst:
+        log.debug('Replacing weights and hyperparameters')
+        top_performers = [m for m in population if m.last_loss < threshold_best]
+        member.replace_with(np.random.choice(top_performers))
+    # Else do nothing
 
 
 class BatchGenerator:
