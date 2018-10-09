@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from pbt.population import BatchGenerator
+from pbt.utils import BatchGenerator
 
 BATCH_AXIS_SIZE = 128
 

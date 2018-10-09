@@ -5,18 +5,24 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 
-from pbt.population import Member, exploit, BatchGenerator
+from pbt.members import Member
+from pbt.utils import BatchGenerator
 
 DATASET = tf.keras.datasets.boston_housing
 
 BATCH_SIZE = 64
 STEPS_TO_READY = 5
 
-TEST_MODEL = keras.models.Sequential([
-    keras.layers.Dense(64, activation='relu'),
-    keras.layers.Dropout(0.2),
-    keras.layers.Dense(1)
-])
+
+def build_fn():
+    model = keras.models.Sequential([
+        keras.layers.Dense(64, activation='relu'),
+        keras.layers.Dropout(0.2),
+        keras.layers.Dense(1)
+    ])
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    return model
+
 
 config = tf.ConfigProto(intra_op_parallelism_threads=1,
                         inter_op_parallelism_threads=1)
@@ -56,7 +62,7 @@ class TestsPbtMethods(unittest.TestCase):
         self.close_current_session()
 
     def create_test_member(self):
-        return Member(TEST_MODEL,
+        return Member(build_fn,
                       BatchGenerator(self.x_train, self.y_train,
                                      self.x_test, self.y_test,
                                      batch_size=BATCH_SIZE),
@@ -106,7 +112,7 @@ class TestsPbtMethods(unittest.TestCase):
         for member in population:
             member.eval()
         # Consider 'member_worst' is ready
-        exploit(member_worst, population)
+        member_worst.exploit(population)
         for member in population:
             self.assert_list_arrays_equal(member.model.get_weights(),
                                           member_best.model.get_weights())
