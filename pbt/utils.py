@@ -1,7 +1,8 @@
 class BatchGenerator:
-    def __init__(self, x_train, y_train, x_test, y_test, batch_size=64):
-        self.x_train, self.y_train = x_train, y_train
-        self.x_test, self.y_test = x_test, y_test
+    """An utility class to access data by batch."""
+
+    def __init__(self, x, y, batch_size=64):
+        self.x_train, self.y_train = x, y
         self.batch_size = batch_size
         self.num_examples = self.x_train.shape[0]
         self.k = 0  # current batch index
@@ -21,6 +22,3 @@ class BatchGenerator:
             batch_y = self.y_train[first_index:]
             self.k = 0
         return batch_x, batch_y
-
-    def val(self):
-        return self.x_test, self.y_test

@@ -6,6 +6,10 @@ from keras.regularizers import Regularizer
 
 
 class Hyperparameter(ABC):
+    """Base class of all hyperparameters that can be modified while training a
+    model.
+
+    """
 
     @abstractmethod
     def __init__(self):
@@ -13,21 +17,47 @@ class Hyperparameter(ABC):
 
     @abstractmethod
     def perturb(self, factors):
+        """Perturb the hyperparameter with a random chosen factor.
+
+        Args:
+            factors (List[double]): factors to choose from.
+
+        """
         pass
 
     @abstractmethod
     def replace_with(self, hyperparameter):
+        """Replace the configuration of this hyperparameter with the
+        configuration of the given one.
+
+        Args:
+            hyperparameter (Hyperparameter): hyperparameter to copy.
+
+        """
+
         pass
 
     @abstractmethod
     def get_config(self):
+        """Return the configuration (value(s)) for this hyperparameter.
+
+        Returns:
+             dict: dictionary where the key is the name of the hyperparameter.
+
+        """
         pass
 
     def save_config_record(self):
+        """Save an history record with the current configuration.
+
+        """
         self.history.append(self.get_config())
 
 
 class L1L2Mutable(Hyperparameter, Regularizer):
+    """To be used with 'kernel_regularizer' in a Keras layer.
+
+    """
 
     def __init__(self, l1=0., l2=0.):
         super(L1L2Mutable, self).__init__()
@@ -62,5 +92,5 @@ class L1L2Mutable(Hyperparameter, Regularizer):
 
 
 # Aliases
-def l1l2(l1=0., l2=0.):
+def l1_l2(l1=0., l2=0.):
     return L1L2Mutable(l1, l2)
