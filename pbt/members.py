@@ -2,9 +2,9 @@ import logging
 from collections import namedtuple
 
 import numpy as np
-from keras.layers import Dense, Conv1D, Conv2D, Conv3D
 
-from pbt import hyperparameters
+from pbt.hyperparameters import find_hyperparameters_model, \
+    find_hyperparameters_layer
 
 log = logging.getLogger(__name__)
 
@@ -16,14 +16,11 @@ class Member:
 
     Each member wraps an instance of a Keras model to tune. The member holds
     references to the hyperparameters of this model, allowing it to change them.
-    However, it is not trivial to change the hyperparameters (e.g., l1 value)
-    after the model is compiled. This is why it is necessary to use Keras
-    variables when defining the hyperparameters. For example, see how
-    L1L2Mutable is implemented to get an idea of how to add more.
 
-    Member of the same population are characterized by the behaviour of the
+    Members of the same population are characterized by the behaviour of the
     following methods: step, eval, ready, exploit and explore. If you think
-    any of these methods does not work for you, just create a subclass.
+    the current implementation of these methods does not work for your problem,
+    just create a subclass and override them.
 
     """
 
@@ -32,19 +29,26 @@ class Member:
 
         Args:
             build_fn (callable): a function that should construct, compile and
-                return a Keras model.
+                return a Keras model. At least one layer of the model should
+                hold a reference to a pbt.hyperparameters.Hyperparameter.
             steps_to_ready (int): number of steps before the member is
                 considered ready to go through the exploit-and-explore process.
 
+        Raises:
+            ValueError: if the given model does not have at least one layer
+            holding a reference to a pbt.hyperparameters.Hyperparameter.
+
         """
+
         self.model = build_fn()
         self.steps_remaining_ready = self.steps_to_ready = steps_to_ready
 
         self.total_steps = 0
         self.loss_history = []
 
-        self.regularizer = hyperparameters.l1_l2(l1=1e-5, l2=1e-5)
-        self._set_kernel_regularizer()
+        self.hyperparameters = find_hyperparameters_model(self.model)
+        if not self.hyperparameters:
+            raise ValueError('The model has no hyperparameters to tune')
 
     def step_on_batch(self, x, y):
         """Gradient descent update on a single batch of data.
@@ -63,7 +67,7 @@ class Member:
         return train_loss
 
     def eval_on_batch(self, x, y):
-        """Evaluate the model on a single batch of samples.
+        """Evaluates the model on a single batch of samples.
 
         Args:
             x (numpy.ndarray): numpy array of evaluation data.
@@ -79,7 +83,7 @@ class Member:
         return eval_loss
 
     def ready(self):
-        """Return if the member of the population is considered ready to
+        """Returns if the member of the population is considered ready to
         go through the exploit-and-explore process.
 
         Returns:
@@ -94,22 +98,23 @@ class Member:
             return False
 
     def explore(self):
-        """Randomly perturb regularization by a factor of 0.8 or 1.2.
+        """Randomly perturbs hyperparameters by a factor of 0.8 or 1.2.
 
         """
         factors = [0.8, 1.2]
-        self.regularizer.perturb(factors)
+        for h in self.hyperparameters:
+            h.perturb(factors)
 
     def exploit(self, population):
         """Truncation selection.
 
-        Rank all the agents in the population by loss. If the current agent is
-        in the bottom 20% of the population, we sample another agent uniformly
-        from the top 20% of the population, and copy its weights and
+        Ranks all the agents in the population by loss. If the current agent is
+        in the bottom 20% of the population, it samples another agent uniformly
+        from the top 20% of the population, and copies its weights and
         hyperparameters.
 
         Args:
-            population (List[Member): entire population.
+            population (List[Member]): entire population.
 
         """
         log.debug('Exploit. Deciding fate of member {}'.format(self))
@@ -123,14 +128,15 @@ class Member:
             log.debug('Underperforming! Replacing weights and hyperparameters')
             top_performers = [m for m in population
                               if m.loss_history[-1].loss < threshold_best]
-            self.replace_with(np.random.choice(top_performers))
+            if top_performers:
+                self.replace_with(np.random.choice(top_performers))
             return True
         else:
             log.debug('Member is doing great')
             return False
 
     def replace_with(self, member):
-        """Replace the hyperparameters and weights of this member with the
+        """Replaces the hyperparameters and weights of this member with the
         hyperparameters and the weights of the given member.
 
         Args:
@@ -138,12 +144,22 @@ class Member:
 
         """
         self.model.set_weights(member.model.get_weights())
-        self.regularizer.replace_with(member.regularizer)
+        for i, layer1 in enumerate(self.model.layers):
+            layer2 = member.model.layers[i]
+            h_layer1 = find_hyperparameters_layer(layer1)
+            h_layer2 = find_hyperparameters_layer(layer2)
+            for (h1, h2) in zip(h_layer1, h_layer2):
+                h1.replace_with(h2)
 
-    def _set_kernel_regularizer(self):
+    def get_hyperparameter_config(self):
+        config = {}
         for layer in self.model.layers:
-            if isinstance(layer, (Dense, Conv1D, Conv2D, Conv3D)):
-                layer.kernel_regularizer = self.regularizer
+            layer_name = layer.get_config().get('name')
+            h_layer = find_hyperparameters_layer(layer)
+            for h in h_layer:
+                for k, v in h.get_config().items():
+                    config['{}:{}'.format(k, layer_name)] = v
+        return config
 
     def __str__(self):
         return str(id(self))

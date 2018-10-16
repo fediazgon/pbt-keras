@@ -1,15 +1,21 @@
-import keras
 import numpy as np
 import pytest
 from keras import backend as K
+from keras.layers import Dense
+from keras.models import Sequential
 from keras.utils import test_utils
 
+from pbt.hyperparameters import L1L2Mutable
 from pbt.members import Member
 
 data_dim = 10
 batch_size = 64
 steps_to_ready = 5
 
+
+# *****************************
+# ***** UTILITY FUNCTIONS *****
+# *****************************
 
 def get_data():
     (x_train, y_train), _ = test_utils.get_test_data(
@@ -23,10 +29,11 @@ def get_data():
 
 def get_test_model():
     np.random.seed(42)
-    model = keras.models.Sequential([
-        keras.layers.Dense(64, activation='relu', input_shape=(data_dim,)),
-        keras.layers.Dropout(0.2),
-        keras.layers.Dense(1)
+    model = Sequential([
+        Dense(64, input_shape=(data_dim,),
+              kernel_regularizer=L1L2Mutable(l1=0.1, l2=1e-5)),
+        Dense(1,
+              kernel_regularizer=L1L2Mutable(l1=0.2, l2=1e-6))
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
     return model
@@ -41,18 +48,36 @@ def assert_list_arrays_equal(list_a, list_b):
         np.testing.assert_array_equal(list_a[i], list_b[i])
 
 
+def assert_hyperparameter_config_equal(config_a, config_b):
+    # Since key is formed by hyperparameter:layerName_layerNumber. Sorting
+    # values by key should give the same order in two different models
+    config_a_values = [value for (key, value) in sorted(config_a.items())]
+    config_b_values = [value for (key, value) in sorted(config_b.items())]
+    np.testing.assert_allclose(config_a_values, config_b_values, atol=1e-6)
+
+
+# *****************************
+
+@pytest.yield_fixture(autouse=True)
+def run_around_tests():
+    K.clear_session()
+
+
 def test_step():
-    """Training two members of the population with the same parameters."""
+    """Trains two members of the population with the same parameters."""
     x, y = get_data()
     ma = get_test_member()
     loss_a = ma.step_on_batch(x, y)
-    ma_reg_config = ma.regularizer.get_config()
+    ma_hyperparameter_config = ma.get_hyperparameter_config()
+    # Start a new session to get the same results
+    # Model initialization does not change because we set the seed
     K.clear_session()
     mb = get_test_member()
     loss_b = mb.step_on_batch(x, y)
-    mb_reg_config = mb.regularizer.get_config()
+    mb_hyperparameter_config = mb.get_hyperparameter_config()
     assert loss_a == loss_b
-    assert ma_reg_config == mb_reg_config
+    assert_hyperparameter_config_equal(ma_hyperparameter_config,
+                                       mb_hyperparameter_config)
 
 
 def test_eval():
@@ -76,6 +101,43 @@ def test_ready():
     assert not ma.ready()
 
 
+def test_explore():
+    """Training two members of the population. Calling 'explore' in one."""
+    ma = get_test_member()
+    loss_a = ma.step_on_batch(*get_data())
+    ma_hyperparameter_config = ma.get_hyperparameter_config()
+    # Clear session. But this time we are going to change the hyperparameters
+    # of the second member (as opposed to what we did in `test_step`
+    K.clear_session()
+    mb = get_test_member()
+    mb.explore()
+    loss_b = mb.step_on_batch(*get_data())
+    mb_hyperparameter_config = mb.get_hyperparameter_config()
+    assert loss_a != loss_b
+    with pytest.raises(AssertionError):
+        assert_hyperparameter_config_equal(ma_hyperparameter_config,
+                                           mb_hyperparameter_config)
+
+
+def test_replace():
+    """Replacing the hyperparameters and weights of one model."""
+    ma = get_test_member()
+    mb = get_test_member()
+    loss_a = ma.step_on_batch(*get_data())
+    loss_b = mb.step_on_batch(*get_data())
+    mb.explore()
+    assert loss_a != loss_b
+    with pytest.raises(AssertionError):
+        assert_list_arrays_equal(ma.model.get_weights(), mb.model.get_weights())
+    with pytest.raises(AssertionError):
+        assert_hyperparameter_config_equal(ma.get_hyperparameter_config(),
+                                           mb.get_hyperparameter_config())
+    ma.replace_with(mb)
+    assert_list_arrays_equal(ma.model.get_weights(), mb.model.get_weights())
+    assert_hyperparameter_config_equal(ma.get_hyperparameter_config(),
+                                       mb.get_hyperparameter_config())
+
+
 def test_exploit():
     """Train a population and check that worst members are replaced."""
     member_best = get_test_member()
@@ -87,43 +149,16 @@ def test_exploit():
     # Call eval to update 'last_loss' in members
     for member in population:
         member.eval_on_batch(*get_data())
-    # Consider 'member_worst' is ready
+    # Consider 'member_worst' is ready. Exploit.
     member_worst.exploit(population)
     member_best_weights = member_best.model.get_weights()
-    member_best_reg_config = member_best.regularizer.get_config()
+    member_best_hyperparameter_config = member_best.get_hyperparameter_config()
     for member in population:
         member_weights = member.model.get_weights()
-        member_reg_config = member.regularizer.get_config()
+        member_hyperparameter_config = member.get_hyperparameter_config()
         assert_list_arrays_equal(member_best_weights, member_weights)
-        assert member_best_reg_config == member_reg_config
-
-
-def test_explore():
-    """Training two members of the population. Calling 'explore' in one."""
-    ma = get_test_member()
-    loss_a = ma.step_on_batch(*get_data())
-    ma_reg_config = ma.regularizer.get_config()
-    K.clear_session()
-    mb = get_test_member()
-    mb.explore()
-    loss_b = mb.step_on_batch(*get_data())
-    mb_reg_config = mb.regularizer.get_config()
-    assert loss_a != loss_b
-    assert ma_reg_config != mb_reg_config
-
-
-def test_replace():
-    """Replacing the hyperparameters and weights of one model."""
-    ma = get_test_member()
-    mb = get_test_member()
-    loss_a = ma.step_on_batch(*get_data())
-    loss_b = mb.step_on_batch(*get_data())
-    assert loss_a != loss_b
-    with pytest.raises(AssertionError):
-        assert_list_arrays_equal(ma.model.get_weights(), mb.model.get_weights())
-    ma.replace_with(mb)
-    assert_list_arrays_equal(ma.model.get_weights(), mb.model.get_weights())
-    assert ma.regularizer.get_config() == mb.regularizer.get_config()
+        assert_hyperparameter_config_equal(member_best_hyperparameter_config,
+                                           member_hyperparameter_config)
 
 
 if __name__ == '__main__':
