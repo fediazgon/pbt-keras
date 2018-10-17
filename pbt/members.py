@@ -1,14 +1,7 @@
-import logging
-from collections import namedtuple
-
 import numpy as np
 
-from pbt.hyperparameters import find_hyperparameters_model, \
-    find_hyperparameters_layer
-
-log = logging.getLogger(__name__)
-
-LossRecord = namedtuple('LossRecord', 'step loss')
+from pbt.hyperparameters import find_hyperparameters_layer, \
+    find_hyperparameters_model
 
 
 class Member:
@@ -44,7 +37,7 @@ class Member:
         self.steps_remaining_ready = self.steps_to_ready = steps_to_ready
 
         self.total_steps = 0
-        self.loss_history = []
+        self.current_loss = np.Inf
 
         self.hyperparameters = find_hyperparameters_model(self.model)
         if not self.hyperparameters:
@@ -77,10 +70,8 @@ class Member:
             double: scalar evaluation loss.
 
         """
-        eval_loss = self.model.evaluate(x, y, verbose=0)
-        self.loss_history.append(
-            LossRecord(step=self.total_steps, loss=eval_loss))
-        return eval_loss
+        self.current_loss = self.model.evaluate(x, y, verbose=0)
+        return self.current_loss
 
     def ready(self):
         """Returns if the member of the population is considered ready to
@@ -101,9 +92,8 @@ class Member:
         """Randomly perturbs hyperparameters by a factor of 0.8 or 1.2.
 
         """
-        factors = [0.8, 1.2]
         for h in self.hyperparameters:
-            h.perturb(factors)
+            h.perturb(None)
 
     def exploit(self, population):
         """Truncation selection.
@@ -116,23 +106,20 @@ class Member:
         Args:
             population (List[Member]): entire population.
 
+        Returns:
+            True if the member was altered, False otherwise.
+
         """
-        log.debug('Exploit. Deciding fate of member {}'.format(self))
-        losses = np.array([m.loss_history[-1].loss for m in population])
-        member_loss = self.loss_history[-1].loss
+        losses = np.array([m.current_loss for m in population])
         # Lower is better. Top 20% means percentile 20 in losses
         threshold_best, threshold_worst = np.percentile(losses, (20, 80))
-        log.debug('Top 20 loss is {:f}, bottom 20 is {:f}, member loss is {:f}'
-                  .format(threshold_best, threshold_worst, member_loss))
-        if member_loss > threshold_worst:
-            log.debug('Underperforming! Replacing weights and hyperparameters')
+        if self.current_loss > threshold_worst:
             top_performers = [m for m in population
-                              if m.loss_history[-1].loss < threshold_best]
+                              if m.current_loss < threshold_best]
             if top_performers:
                 self.replace_with(np.random.choice(top_performers))
             return True
         else:
-            log.debug('Member is doing great')
             return False
 
     def replace_with(self, member):
@@ -153,12 +140,12 @@ class Member:
 
     def get_hyperparameter_config(self):
         config = {}
-        for layer in self.model.layers:
-            layer_name = layer.get_config().get('name')
+        for idx, layer in enumerate(self.model.layers):
+            # layer_name = layer.get_config().get('name')
             h_layer = find_hyperparameters_layer(layer)
             for h in h_layer:
                 for k, v in h.get_config().items():
-                    config['{}:{}'.format(k, layer_name)] = v
+                    config['{}:{}'.format(k, idx)] = v
         return config
 
     def __str__(self):

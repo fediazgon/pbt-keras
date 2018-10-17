@@ -58,8 +58,9 @@ def test_hyperparameters_config():
     K.clear_session()
     m = get_test_member()
     config = m.get_hyperparameter_config()
-    expected_config = {'l1:dense_1': 0.1, 'l2:dense_1': 1e-5,
-                       'l1:dense_2': 0.2, 'l2:dense_2': 1e-8}
+    print(config)
+    expected_config = {'l1:0': 0.1, 'l2:0': 1e-5,
+                       'l1:1': 0.2, 'l2:1': 1e-8}
     for k, v in expected_config.items():
         assert v == pytest.approx(config[k], abs=1e-6)
 

@@ -58,6 +58,8 @@ class L1L2Mutable(Hyperparameter, Regularizer):
         self.l2 = K.variable(K.cast_to_floatx(l2), name='l2')
 
     def perturb(self, factors):
+        if not factors:
+            factors = [0.2, 0.5, 1.5, 2]
         K.set_value(self.l1,
                     K.get_value(self.l1) * np.random.choice(factors))
         K.set_value(self.l2,
