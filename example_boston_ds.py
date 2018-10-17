@@ -1,83 +1,87 @@
-import logging
-from collections import namedtuple
+from collections import defaultdict
 
 import keras
+import keras.backend as K
 import numpy as np
+import pandas as pd
 import tensorflow as tf
+from keras.utils.generic_utils import Progbar
+from sklearn import preprocessing
 from sklearn.model_selection import ParameterGrid, train_test_split
 
-import pbt.members
-import pbt.utils
+import pbt
 
-FORMAT = '%(asctime)s - %(name)10.10s - %(levelname)5.5s - %(message)s'
+fmt = '%(asctime)s - %(name)10.10s - %(levelname)5.5s - %(message)s'
 
-TEST_SPLIT = 0.3
-POPULATION_SIZE = 10
-BATCH_SIZE = 32  # one step in a member is equivalent to train on a batch
-TOTAL_STEPS = 1000  # total number of steps before ending training
-STEPS_TO_READY = 50  # number of steps before updating a member
-
-sh = logging.StreamHandler()
-sh.setFormatter(logging.Formatter(fmt=FORMAT, datefmt='%I:%M:%S %p'))
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
-logger.addHandler(sh)
+test_split = 0.3
+# population_size = 20
+batch_size = 32  # one step in a member is equivalent to train on a batch
+total_steps = 1000  # total number of steps before ending training
+steps_to_ready = 50  # number of steps before updating a member
 
 
-def create_model_fn(l1=0.0, l2=0.0):
-    """Create the model to tune.
+def create_model_fn(data_dim, l1=1e-5, l2=1e-5):
+    """Returns a function which can be called with no parameters to create a new
+     model.
 
-    This function is required by Member and KerasClassifier. Both classes
-    invoke this function to construct a new instance of the model.
+    This function is required by Member and CrossValidation. Both classes invoke
+     this function to construct a new instance of the model.
 
     Returns:
-        A compiled Keras model.
+        function: a function that can be called to get a compiled Keras model.
 
     """
-    model = keras.models.Sequential([
-        keras.layers.Dense(64,
-                           activation='relu',
-                           kernel_regularizer=keras.regularizers.l1_l2(l1, l2)),
-        keras.layers.Dropout(0.2),
-        keras.layers.Dense(1,
-                           kernel_regularizer=keras.regularizers.l1_l2(l1, l2))
-    ])
-    model.compile(optimizer='adam', loss='mean_squared_error')
-    return model
+
+    def _create_model_fn():
+        np.random.seed(42)
+        model = keras.models.Sequential([
+            keras.layers.Dense(64,
+                               activation='relu',
+                               input_shape=(data_dim,),
+                               kernel_regularizer=
+                               pbt.hyperparameters.l1_l2(l1, l2)),
+            keras.layers.Dense(1,
+                               kernel_regularizer=
+                               pbt.hyperparameters.l1_l2(l1, l2)),
+        ])
+        model.compile(optimizer='adam', loss='mean_squared_error')
+        return model
+
+    return _create_model_fn
 
 
-def create_member():
+def create_member(data_dim, **h):
     """Create a new population member.
 
     Each member wraps a Keras model with the same architecture. However, each
     one of them has a different starting value for the model's hyperparameters.
 
+    Args:
+        data_dim (int): number of features in the training set.
+        **h: hyperparameters.
+
     Returns:
-        A new population Member.
+        pbt.members.Member: A new population Member.
 
     """
-    return pbt.members.Member(create_model_fn, STEPS_TO_READY)
+    return pbt.members.Member(create_model_fn(data_dim, **h), steps_to_ready)
 
 
-def log(step, population):
-    """Log the status of the population.
-
-    Log the loss and hyperparameters of each member at a specific step.
+def statistics(values, suffix=''):
+    """Returns a List of tuples to use with Keras Progbar.
 
     Args:
-        step (int): current training step.
-        population (List[Member]): population members.
+        values (List[int]): list of values.
+        suffix (str): suffix to add to each metric (i.e., min_<suffix>)
+
+    Return:
+        Minimum, maximum and mean value for the given list.
 
     """
-    logger.info('***** Step {:d} *****'.format(step))
-    population.sort(key=lambda m: m.loss_history[-1].loss)
-    for member in population:
-        current_loss = member.loss_history[-1].loss
-        logger.info('Member {!s} loss is {:f}'.format(member, current_loss))
-        logger.debug('Hyperparameters: {}'.format(
-            member.regularizer.get_config()
-        ))
-    logger.info('*****')
+    min_value = ('min_' + suffix, min(values))
+    max_value = ('max_' + suffix, max(values))
+    mean_value = ('mean_' + suffix, sum(values) / len(values))
+    return [min_value, max_value, mean_value]
 
 
 def main():
@@ -85,97 +89,127 @@ def main():
     dataset = tf.keras.datasets.boston_housing
     (x_train, y_train), (x_test, y_test) = dataset.load_data()
     x_train, x_val, y_train, y_val = train_test_split(
-        x_train, y_train, test_size=TEST_SPLIT)
+        x_train, y_train, test_size=test_split)
     print('Train examples: {}, val examples: {}, test examples {}:'.format(
         x_train.shape[0], x_val.shape[0], x_test.shape[0]
     ))
 
-    # ------------------------------------------
-    #   GRID SEARCH
-    # ------------------------------------------
+    num_examples, num_features = x_train.shape
 
-    print('***** GRID SEARCH *****')
+    # ------------------------------------------
+    # SEARCH SPACE
+    # ------------------------------------------
+    l1 = np.linspace(1e-5, 0.01, num=3).tolist()
+    l2 = np.linspace(1e-5, 0.01, num=3).tolist()
+    param_grid = ParameterGrid(dict(l1=l1, l2=l2))
+
+    # ------------------------------------------
+    # GRID SEARCH
+    # ------------------------------------------
+    K.clear_session()
 
     # Train using both approaches during the same period of time (steps)
-    steps_per_epoch = int(x_train.shape[0] / BATCH_SIZE)
-    epochs = int(TOTAL_STEPS / steps_per_epoch)
-    l1 = np.linspace(1e-5, 1e-2, num=3).tolist()
-    l2 = np.linspace(1e-5, 1e-2, num=3).tolist()
-    param_grid = dict(l1=l1, l2=l2)
-    Result = namedtuple('Result', ['id', 'loss', 'hyperparameters'])
-    results = []
-    for idx, h in enumerate(ParameterGrid(param_grid)):
-        model = create_model_fn(**h)
-        model_id = 'Model_{}'.format(idx)
-        logger.info('Training {} with hyperparameters {}'.format(model_id, h))
-        model.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=epochs,
+    steps_per_epoch = int(num_examples / batch_size)
+    epochs = int(total_steps / steps_per_epoch)
+
+    gs_results = defaultdict(lambda: [])
+
+    progbar = Progbar(len(param_grid),
+                      stateful_metrics=['min_loss', 'max_loss', 'mean_loss'])
+
+    for idx, h in enumerate(param_grid):
+        model = create_model_fn(num_features, **h)()
+        model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs,
                   verbose=0, validation_data=(x_val, y_val), shuffle=False)
+        model_id = 'Model_{}'.format(idx)
         final_loss = model.test_on_batch(x_val, y_val)
-        results.append(Result(id=model_id, loss=final_loss, hyperparameters=h))
+        gs_results['model_id'].append(model_id)
+        gs_results['final_loss'].append(final_loss)
+        for h, v in h.items():
+            gs_results[h].append(v)
+
+        loss_stats = statistics(gs_results['final_loss'], suffix='loss')
+        progbar.update(idx + 1, loss_stats)
+
+    gs_results_df = pd.DataFrame(gs_results)
 
     print('***** GRID SEARCH RESULTS *****')
-    all_losses = []
     print('** Ranking **')
-    results.sort(key=lambda result: result.loss)
-    for r in results:
-        all_losses.append(r.loss)
-        print('{} -> loss = {:f}'.format(r.id, r.loss))
+    print(gs_results_df.sort_values('final_loss'))
     print('** Statistics **')
-    print('Mean loss = {:f}, median loss = {:f}, std loss = {:f}'.format(
-        np.mean(all_losses), np.median(all_losses), np.std(all_losses)
-    ))
+    print(gs_results_df['final_loss'].describe())
     print('** Best hyperparameters **')
-    print(results[0].hyperparameters)
+    best = gs_results_df.iloc[[gs_results_df['final_loss'].idxmin()]]
+    print(best.filter(regex="l.+"))
 
     # ------------------------------------------
-    #   PBT
+    # PBT
     # ------------------------------------------
+    K.clear_session()
 
-    # Initial population
-    batch_generator = pbt.utils.BatchGenerator(x_train, y_train, BATCH_SIZE)
-    population = [create_member() for _ in range(POPULATION_SIZE)]
+    batch_generator = pbt.utils.BatchGenerator(x_train, y_train, batch_size)
+    population = []
+    for h in param_grid:
+        # member = create_member(x_train.shape[1], **np.random.choice(param_grid))
+        member = create_member(x_train.shape[1], **h)
+        population.append(member)
+    
+    pbt_results = defaultdict(lambda: [])
 
-    print('***** POPULATION BASED TRAINING *****')
-    step = 1
-    while step < TOTAL_STEPS:
+    progbar = Progbar(total_steps,
+                      stateful_metrics=['min_loss', 'max_loss', 'mean_loss'])
+
+    step = 0
+    population_size = len(population)
+    while step < total_steps:
         x, y = batch_generator.next()
-        if step % STEPS_TO_READY == 0:
-            log(step, population)
-        for member in population:
+        for idx, member in enumerate(population):
             # One step of optimisation using hyperparameters of 'member'
             member.step_on_batch(x, y)
             # Model evaluation
-            loss_before = member.eval_on_batch(x_val, y_val)
+            loss = member.eval_on_batch(x_val, y_val)
             # If optimised for 'STEPS_TO_READY' steps
-            if member.ready() and member != population[0]:
+            if member.ready():
                 # Use the rest of population to find better solutions
                 exploited = member.exploit(population)
                 # If new weights != old weights
                 if exploited:
-                    logger.info(
-                        'Finding new hyperparameters for {!s}'.format(member))
                     # Produce new hyperparameters for 'member'
                     member.explore()
-                    loss_after = member.eval_on_batch(x_val, y_val)
-                    logger.info('Loss before {:f}, loss after {:f}'.format(
-                        loss_before, loss_after
-                    ))
+                    loss = member.eval_on_batch(x_val, y_val)
+                pbt_results['model_id'].append(str(member))
+                pbt_results['step'].append(step)
+                pbt_results['loss'].append(loss)
+                for h, v in member.get_hyperparameter_config().items():
+                    pbt_results[h].append(v)
+
+                # Update progress bar after updating last member
+                if idx == population_size - 1:
+                    # Get recently added losses to show in the progress bar
+                    all_losses = pbt_results['loss']
+                    recent_losses = all_losses[-population_size:]
+                    if recent_losses:
+                        loss_stats = statistics(recent_losses, suffix='loss')
+                        progbar.update(step, loss_stats)
+
         step += 1
+        progbar.update(step)
+
+    pbt_results_df = pd.DataFrame(pbt_results)
+    pbt_results_df['model_id'] = pbt_results_df['model_id'].astype('category')
+    le = preprocessing.LabelEncoder()
+    le.fit(pbt_results_df['model_id'])
+    pbt_results_df['model_id_idx'] = le.transform(pbt_results_df['model_id'])
 
     print('***** PBT RESULTS *****')
-    all_losses = []
-    population.sort(key=lambda m: m.loss_history[-1].loss)
+    pbt_final_df = pbt_results_df.tail(population_size)
     print('** Ranking **')
-    for member in population:
-        final_loss = member.eval_on_batch(x_val, y_val)
-        all_losses.append(final_loss)
-        print('Member {!s} -> loss = {:f}'.format(member, final_loss))
+    print(pbt_final_df[['model_id', 'loss']].sort_values('loss'))
     print('** Statistics **')
-    print('Mean loss = {:f}, median loss = {:f}, std loss = {:f}'.format(
-        np.mean(all_losses), np.median(all_losses), np.std(all_losses)
-    ))
+    print(pbt_final_df['loss'].describe())
     print('** Best hyperparameters **')
-    print(population[0].regularizer.get_config())
+    best = pbt_results_df.iloc[[pbt_final_df['loss'].idxmin()]]
+    print(best.filter(regex=".+:.+"))
 
 
 if __name__ == "__main__":
