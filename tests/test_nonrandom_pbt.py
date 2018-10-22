@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import tensorflow as tf
 from keras import backend as K
 from keras.layers import Dense
 from keras.models import Sequential
@@ -8,9 +9,14 @@ from keras.utils import test_utils
 from pbt.hyperparameters import L1L2Mutable
 from pbt.members import Member
 
-data_dim = 10
-batch_size = 64
-steps_to_ready = 5
+DATA_DIM = 10
+BATCH_SIZE = 64
+STEPS_READY = 5
+
+session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
+                              inter_op_parallelism_threads=1)
+sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+K.set_session(sess)
 
 
 # *****************************
@@ -19,9 +25,9 @@ steps_to_ready = 5
 
 def get_data():
     (x_train, y_train), _ = test_utils.get_test_data(
-        num_train=batch_size,
-        num_test=batch_size,
-        input_shape=(data_dim,),
+        num_train=BATCH_SIZE,
+        num_test=BATCH_SIZE,
+        input_shape=(DATA_DIM,),
         output_shape=(1,),
         classification=False)
     return x_train, y_train
@@ -30,7 +36,7 @@ def get_data():
 def get_test_model():
     np.random.seed(42)
     model = Sequential([
-        Dense(64, input_shape=(data_dim,),
+        Dense(64, input_shape=(DATA_DIM,),
               kernel_regularizer=L1L2Mutable(l1=0.1, l2=1e-5)),
         Dense(1,
               kernel_regularizer=L1L2Mutable(l1=0.2, l2=1e-6))
@@ -40,7 +46,7 @@ def get_test_model():
 
 
 def get_test_member():
-    return Member(get_test_model, steps_to_ready)
+    return Member(get_test_model, STEPS_READY)
 
 
 def assert_list_arrays_equal(list_a, list_b):
@@ -68,12 +74,16 @@ def test_step():
     x, y = get_data()
     ma = get_test_member()
     loss_a = ma.step_on_batch(x, y)
+    for i in range(100):
+        loss_a = ma.step_on_batch(x, y)
     ma_hyperparameter_config = ma.get_hyperparameter_config()
     # Start a new session to get the same results
     # Model initialization does not change because we set the seed
     K.clear_session()
     mb = get_test_member()
     loss_b = mb.step_on_batch(x, y)
+    for i in range(100):
+        loss_b = mb.step_on_batch(x, y)
     mb_hyperparameter_config = mb.get_hyperparameter_config()
     assert loss_a == loss_b
     assert_hyperparameter_config_equal(ma_hyperparameter_config,
@@ -81,7 +91,7 @@ def test_step():
 
 
 def test_eval():
-    """Training one model for a few steps to evaluate the performance."""
+    """Trains one model for a few steps to evaluate the performance."""
     ma = get_test_member()
     loss_1 = ma.eval_on_batch(*get_data())
     for i in range(5):
@@ -91,10 +101,10 @@ def test_eval():
 
 
 def test_ready():
-    """Train one model for the required number of steps to be ready."""
+    """Trains one model for the required number of steps to be ready."""
     ma = get_test_member()
     assert not ma.ready()
-    for i in range(steps_to_ready):
+    for i in range(STEPS_READY):
         ma.step_on_batch(*get_data())
     assert ma.ready()
     ma.step_on_batch(*get_data())
@@ -102,7 +112,7 @@ def test_ready():
 
 
 def test_explore():
-    """Training two members of the population. Calling 'explore' in one."""
+    """Trains two members of the population. Calls 'explore' in one."""
     ma = get_test_member()
     loss_a = ma.step_on_batch(*get_data())
     ma_hyperparameter_config = ma.get_hyperparameter_config()
@@ -120,7 +130,7 @@ def test_explore():
 
 
 def test_replace():
-    """Replacing the hyperparameters and weights of one model."""
+    """Replaces the hyperparameters and weights of one model."""
     ma = get_test_member()
     mb = get_test_member()
     loss_a = ma.step_on_batch(*get_data())
@@ -139,7 +149,7 @@ def test_replace():
 
 
 def test_exploit():
-    """Train a population and check that worst members are replaced."""
+    """Trains a population and checks that worst members are replaced."""
     member_best = get_test_member()
     member_worst = get_test_member()
     population = [member_best, member_worst]

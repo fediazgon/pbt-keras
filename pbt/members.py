@@ -17,15 +17,16 @@ class Member:
 
     """
 
-    def __init__(self, build_fn, steps_to_ready):
+    def __init__(self, build_fn, steps_ready=None):
         """Creates a new population member.
 
         Args:
             build_fn (callable): a function that should construct, compile and
                 return a Keras model. At least one layer of the model should
                 hold a reference to a pbt.hyperparameters.Hyperparameter.
-            steps_to_ready (int): number of steps before the member is
-                considered ready to go through the exploit-and-explore process.
+            steps_ready: number of steps before the member is considered ready
+                to go through the exploit-and-explore process. Or 'None' if the
+                member should not explore new hyperparameters.
 
         Raises:
             ValueError: if the given model does not have at least one layer
@@ -34,9 +35,10 @@ class Member:
         """
 
         self.model = build_fn()
-        self.steps_remaining_ready = self.steps_to_ready = steps_to_ready
 
-        self.total_steps = 0
+        self.steps_cycle = 0
+        self.step_ready = steps_ready
+
         self.current_loss = np.Inf
 
         self.hyperparameters = find_hyperparameters_model(self.model)
@@ -55,8 +57,7 @@ class Member:
 
         """
         train_loss = self.model.train_on_batch(x, y)
-        self.total_steps += 1
-        self.steps_remaining_ready -= 1
+        self.steps_cycle += 1
         return train_loss
 
     def eval_on_batch(self, x, y):
@@ -81,12 +82,12 @@ class Member:
             bool: True if this member is ready, False otherwise.
 
         """
-        # In case the user call step twice just when the model is ready
-        if self.steps_remaining_ready <= 0:
-            self.steps_remaining_ready = self.steps_to_ready
-            return True
-        else:
+        if not self.step_ready or self.steps_cycle < self.step_ready:
             return False
+        else:
+            self.steps_cycle = 0
+            return True
+            pass
 
     def explore(self):
         """Randomly perturbs hyperparameters by a factor of 0.8 or 1.2.

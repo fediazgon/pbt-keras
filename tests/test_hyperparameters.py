@@ -53,12 +53,11 @@ def test_hyperparameters_found():
 
 
 def test_hyperparameters_config():
-    """Test that the model has the right hyperparameter configuration."""
+    """Checks that the model has the right hyperparameter configuration."""
     # Clear the session to restart the naming of the Keras layers
     K.clear_session()
     m = get_test_member()
     config = m.get_hyperparameter_config()
-    print(config)
     expected_config = {'l1:0': 0.1, 'l2:0': 1e-5,
                        'l1:1': 0.2, 'l2:1': 1e-8}
     for k, v in expected_config.items():
