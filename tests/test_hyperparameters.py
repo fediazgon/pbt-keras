@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 from keras.layers import Dense
 from keras.models import Sequential
+from keras.optimizers import Adam
 from keras.utils import test_utils as k_test_utils
 
 from pbt.hyperparameters import L1L2Mutable
@@ -36,12 +37,13 @@ def get_test_model():
         Dense(1,
               kernel_regularizer=L1L2Mutable(l1=0.2, l2=1e-6))
     ])
-    model.compile(optimizer='adam', loss='mean_squared_error')
+    adam = Adam(lr=0.1)
+    model.compile(optimizer=adam, loss='mean_squared_error')
     return model
 
 
 def get_test_member():
-    return Member(get_test_model, steps_to_ready)
+    return Member(get_test_model, steps_to_ready, tune_lr=True)
 
 
 # *****************************
@@ -49,7 +51,7 @@ def get_test_member():
 def test_hyperparameters_found():
     """Checks that the member could find the hyperparameters of the model."""
     m = get_test_member()
-    assert len(m.hyperparameters) == 2
+    assert len(m.hyperparameters) == 3
 
 
 def test_hyperparameters_config():
@@ -59,7 +61,8 @@ def test_hyperparameters_config():
     m = get_test_member()
     config = m.get_hyperparameter_config()
     expected_config = {'l1:0': 0.1, 'l2:0': 1e-5,
-                       'l1:1': 0.2, 'l2:1': 1e-8}
+                       'l1:1': 0.2, 'l2:1': 1e-8,
+                       'lr': 0.1}
     for k, v in expected_config.items():
         assert v == pytest.approx(config[k], abs=1e-6)
 
@@ -70,7 +73,8 @@ def test_hyperparameters_called(mock):
     x, y = get_data()
     ma = get_test_member()
     ma.step_on_batch(x, y)
-    calls = [call('Called {}'.format(h)) for h in ma.hyperparameters]
+    calls = [call('Called {}'.format(h)) for h in ma.hyperparameters
+             if isinstance(h, L1L2Mutable)]
     mock.assert_has_calls(calls, any_order=True)
 
 

@@ -1,7 +1,7 @@
 import numpy as np
 
 from pbt.hyperparameters import find_hyperparameters_layer, \
-    find_hyperparameters_model
+    find_hyperparameters_model, FloatHyperparameter
 
 
 class Member:
@@ -17,7 +17,7 @@ class Member:
 
     """
 
-    def __init__(self, build_fn, steps_ready=None):
+    def __init__(self, build_fn, steps_ready=None, tune_lr=False):
         """Creates a new population member.
 
         Args:
@@ -42,6 +42,11 @@ class Member:
         self.current_loss = np.Inf
 
         self.hyperparameters = find_hyperparameters_model(self.model)
+
+        if tune_lr:
+            lr = FloatHyperparameter('lr', self.model.optimizer.lr)
+            self.hyperparameters.append(lr)
+
         if not self.hyperparameters:
             raise ValueError('The model has no hyperparameters to tune')
 
@@ -147,6 +152,9 @@ class Member:
             for h in h_layer:
                 for k, v in h.get_config().items():
                     config['{}:{}'.format(k, idx)] = v
+        for h in self.hyperparameters:
+            if isinstance(h, FloatHyperparameter):
+                config.update(h.get_config())
         return config
 
     def __str__(self):

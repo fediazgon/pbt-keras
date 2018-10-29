@@ -4,6 +4,7 @@ import tensorflow as tf
 from keras import backend as K
 from keras.layers import Dense
 from keras.models import Sequential
+from keras.optimizers import Adam
 from keras.utils import test_utils
 
 from pbt.hyperparameters import L1L2Mutable
@@ -41,7 +42,8 @@ def get_test_model():
         Dense(1,
               kernel_regularizer=L1L2Mutable(l1=0.2, l2=1e-6))
     ])
-    model.compile(optimizer='adam', loss='mean_squared_error')
+    adam = Adam(lr=0.1)
+    model.compile(optimizer=adam, loss='mean_squared_error')
     return model
 
 
@@ -94,7 +96,7 @@ def test_eval():
     """Trains one model for a few steps to evaluate the performance."""
     ma = get_test_member()
     loss_1 = ma.eval_on_batch(*get_data())
-    for i in range(5):
+    for i in range(20):
         ma.step_on_batch(*get_data())
     loss_n = ma.eval_on_batch(*get_data())
     assert loss_n < loss_1

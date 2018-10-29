@@ -15,7 +15,7 @@ class Hyperparameter(ABC):
     """
 
     @abstractmethod
-    def perturb(self, factors):
+    def perturb(self, factors=None):
         """Perturb the hyperparameter with a random chosen factor.
 
         Args:
@@ -57,7 +57,7 @@ class L1L2Mutable(Hyperparameter, Regularizer):
         self.l1 = K.variable(K.cast_to_floatx(l1), name='l1')
         self.l2 = K.variable(K.cast_to_floatx(l2), name='l2')
 
-    def perturb(self, factors):
+    def perturb(self, factors=None):
         if not factors:
             factors = [0.2, 0.5, 1.5, 2]
         K.set_value(self.l1,
@@ -89,6 +89,26 @@ class L1L2Mutable(Hyperparameter, Regularizer):
 # Aliases
 def l1_l2(l1=0., l2=0.):
     return L1L2Mutable(l1, l2)
+
+
+class FloatHyperparameter(Hyperparameter):
+
+    def __init__(self, name, variable):
+        self.name = name
+        self.variable = variable
+
+    def perturb(self, factors=None):
+        if not factors:
+            factors = [0.2, 0.5, 1.5, 2]
+        K.set_value(self.variable,
+                    K.get_value(self.variable) * np.random.choice(factors))
+
+    def replace_with(self, hyperparameter):
+        K.set_value(self.variable, K.cast_to_floatx(
+            hyperparameter.get_config().get(self.name)))
+
+    def get_config(self):
+        return {self.name: float(K.get_value(self.variable))}
 
 
 def find_hyperparameters_model(keras_model):
