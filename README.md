@@ -1,6 +1,6 @@
 <h1 align="center">
   <div>
-    <img src="https://github.com/fdiazgon/pbt-keras/blob/assets/logo.png?raw=true" alt="project-logo">
+    <img src="https://github.com/fdiazgon/pbt-keras/blob/assets/logo.png?raw=true" alt="project-logo" style="width:800">
   </div>
   pbt-keras
 </h1>
@@ -19,22 +19,25 @@ Population Based Training of Neural Network implemented in Keras.
 
 ## Getting started
 
-To run the Boston Housing Dataset example, you need Keras with Tensorflow backend. Check any of the example_boston_ds files.
+To run the Boston Housing Dataset example, you need Keras with Tensorflow backend. Check any of the `example_boston_ds` files.
 
-In this example,  we use two methods to tune the hyperparameters (L1 and L2 regularization for now): a grid search with 6 x 6 = 36 different configurations and a population with the same number of members.
+We start by training a grid search with a total of 36 combinations of hyperparameters (6 values for l1 and 6 for l2). We choose the initial values for these hyperparameters taking evenly spaced numbers on a log scale (a geometric progression) between two endpoints.
 
-In the following table, you can see a ranking of the models/members according to their final loss (you can take a look at them in `example_boston_ds.ipynb`):
+Next, we train populations of different sizes (6, 12, 18, 24, 30, 36) with each worker being trained for the same number of steps as each member of the grid search. The workers of a population of size *k* are initialized sampling *k* evenly spaced combinations over the parameter grid, where `k <= len(grid)`. These are the resulting learning curves:
 
-| Rank | Grid Search loss | PBT loss  |
-|------|------------------|-----------|
-| 1    | 22.026169        | 21.782267 |
-| 2    | 22.858138        | 21.782267 |
-| ...  | ...              | ...       |
-| 18   | 25.088423        | 21.782282 |
-| 19   | 25.110988        | 21.782285 |
-| ...  | ...              | ...       |
-| 35   | 35.687804        | 21.918402 |
-| 36   | 35.862466        | 21.955107 |
+![training_curves](https://github.com/fdiazgon/pbt-keras/blob/assets/training_curves.png?raw=true)
+
+Each worker is represented by a line. Highlighted lines are an average of the top 5 workers at each step.
+
+In the next image, you can see how the hyperparameters change during training.
+
+![hyperparameter_population](https://github.com/fdiazgon/pbt-keras/blob/assets/hyperparameter_population.png?raw=true)
+
+Figures represent l1 and l2 regularization respectively (in a log scale). You can see how they adopt lower values during training. The same can be visualized in the following figure, where we compare it against grid search:
+
+![hyperparameter_evolution](https://github.com/fdiazgon/pbt-keras/blob/assets/hyperparameter_evolution.png?raw=true)
+
+As it is obvious, the right figure represents l1 and l2 regularization of the 36 workers in the grid search (they do not change during training). On the other hand, in the left figure, is possible to see how we are exploring values closer to zero (a darker colour represents a value explored in a later stage during training).
 
 It is worth mentioning that the grid search was also performed using the PBT algorithm, the only difference is that, for grid search, we avoid exploring new hyperparameters.
 
