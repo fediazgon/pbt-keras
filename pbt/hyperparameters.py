@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 from keras import backend as K
+from keras.layers import Dropout
 from keras.regularizers import Regularizer
 
 log = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ class L1L2Mutable(Hyperparameter, Regularizer):
 
     def perturb(self, factors=None):
         if not factors:
-            factors = [0.2, 0.5, 1.5, 2]
+            factors = [0.8, 1.2]
         K.set_value(self.l1,
                     K.get_value(self.l1) * np.random.choice(factors))
         K.set_value(self.l2,
@@ -91,6 +92,23 @@ def l1_l2(l1=0., l2=0.):
     return L1L2Mutable(l1, l2)
 
 
+class DropoutMutable(Hyperparameter, Dropout):
+
+    def __init__(self, rate, noise_shape=None, seed=None, **kwargs):
+        super().__init__(rate, noise_shape=noise_shape, seed=seed, **kwargs)
+
+    def perturb(self, factors=None):
+        if not factors:
+            factors = [0.8, 1.2]
+        self.rate = self.rate * np.random.choice(factors)
+
+    def replace_with(self, hyperparameter):
+        self.rate = hyperparameter.get_config().get('dr')
+
+    def get_config(self):
+        return {'dr': self.rate}
+
+
 class FloatHyperparameter(Hyperparameter):
 
     def __init__(self, name, variable):
@@ -99,7 +117,7 @@ class FloatHyperparameter(Hyperparameter):
 
     def perturb(self, factors=None):
         if not factors:
-            factors = [0.2, 0.5, 1.5, 2]
+            factors = [0.8, 1.2]
         K.set_value(self.variable,
                     K.get_value(self.variable) * np.random.choice(factors))
 
@@ -116,15 +134,12 @@ def find_hyperparameters_model(keras_model):
 
     For example, in the following model::
 
-        model = keras.models.Sequential([
-        keras.layers.Dense(64,
-                           input_shape=(10,),
-                           kernel_regularizer=pbt.hyperparameters
-                           .L1L2Mutable(l1=1e-5, l2=1e-5)),
-        keras.layers.Dense(1,
-                           kernel_regularizer=keras.regularizers
-                           .l1_l2(l1=1e-5, l2=1e-5))
-        ])
+        keras.layers.Dense(
+            42,
+            kernel_regularizer=pbt.hyperparameters.L1L2Mutable(l1=0, l2=1e-5),
+            bias_initializer=keras.initializers.Zeros(),
+            input_shape=(13,)
+        )
 
     L1L2Mutable is an instance of pbt.hyperparameters.Hyperparameter, but
     l1_l2 is not. As a result, the method will only return the former.
@@ -138,7 +153,10 @@ def find_hyperparameters_model(keras_model):
     """
     hyperparameters = []
     for layer in keras_model.layers:
-        hyperparameters += find_hyperparameters_layer(layer)
+        if isinstance(layer, Hyperparameter):
+            hyperparameters.append(layer)
+        else:
+            hyperparameters.extend(find_hyperparameters_layer(layer))
     return hyperparameters
 
 
@@ -147,12 +165,12 @@ def find_hyperparameters_layer(keras_layer):
 
     For example, in the following model::
 
-        keras.layers.Dense(42,
-                           input_shape=(13,),
-                           kernel_regularizer=pbt.hyperparameters
-                           .L1L2Mutable(l1=1e-5, l2=1e-5),
-                           bias_initializer=keras.initializers.Zeros())
-
+        keras.layers.Dense(
+            42,
+            kernel_regularizer=pbt.hyperparameters.L1L2Mutable(l1=0, l2=1e-5),
+            bias_initializer=keras.initializers.Zeros(),
+            input_shape=(13,)
+        )
 
     L1L2Mutable is an instance of pbt.hyperparameters.Hyperparameter, but
     Zeros is not. As a result, the method will only return the former.

@@ -1,7 +1,9 @@
+from collections import deque
+
 import numpy as np
 
 from pbt.hyperparameters import find_hyperparameters_layer, \
-    find_hyperparameters_model, FloatHyperparameter
+    find_hyperparameters_model, Hyperparameter, FloatHyperparameter
 
 
 class Member:
@@ -40,6 +42,7 @@ class Member:
         self.step_ready = steps_ready
 
         self.current_loss = np.Inf
+        self.recent_losses = deque(maxlen=10)
 
         self.hyperparameters = find_hyperparameters_model(self.model)
 
@@ -49,6 +52,9 @@ class Member:
 
         if not self.hyperparameters:
             raise ValueError('The model has no hyperparameters to tune')
+
+    def loss_smoothed(self):
+        return sum(self.recent_losses) / len(self.recent_losses)
 
     def step_on_batch(self, x, y):
         """Gradient descent update on a single batch of data.
@@ -76,8 +82,12 @@ class Member:
             double: scalar evaluation loss.
 
         """
-        self.current_loss = self.model.evaluate(x, y, verbose=0)
+        self.current_loss = self.model.test_on_batch(x, y)
+        self.recent_losses.append(self.current_loss)
         return self.current_loss
+
+    def test_on_batch(self, x, y):
+        return self.model.test_on_batch(x, y)
 
     def ready(self):
         """Returns if the member of the population is considered ready to
@@ -136,20 +146,21 @@ class Member:
             member (Member): member to copy.
 
         """
+        assert len(self.hyperparameters) == len(member.hyperparameters), \
+            'Members do not belong to the same population!'
         self.model.set_weights(member.model.get_weights())
-        for i, layer1 in enumerate(self.model.layers):
-            layer2 = member.model.layers[i]
-            h_layer1 = find_hyperparameters_layer(layer1)
-            h_layer2 = find_hyperparameters_layer(layer2)
-            for (h1, h2) in zip(h_layer1, h_layer2):
-                h1.replace_with(h2)
+        for i, hyperparameter in enumerate(self.hyperparameters):
+            hyperparameter.replace_with(member.hyperparameters[i])
 
     def get_hyperparameter_config(self):
         config = {}
         for idx, layer in enumerate(self.model.layers):
             # layer_name = layer.get_config().get('name')
-            h_layer = find_hyperparameters_layer(layer)
-            for h in h_layer:
+            if isinstance(layer, Hyperparameter):
+                hyperparameters = [layer]
+            else:
+                hyperparameters = find_hyperparameters_layer(layer)
+            for h in hyperparameters:
                 for k, v in h.get_config().items():
                     config['{}:{}'.format(k, idx)] = v
         for h in self.hyperparameters:

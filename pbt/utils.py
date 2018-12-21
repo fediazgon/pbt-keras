@@ -65,6 +65,7 @@ def train_population(population, x, y, batch_size, steps,
                 results['model_id'].append(str(member))
                 results['step'].append(step)
                 results['loss'].append(loss)
+                results['loss_smoothed'].append(member.loss_smoothed())
                 for h, v in member.get_hyperparameter_config().items():
                     results[h].append(v)
 

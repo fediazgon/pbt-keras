@@ -27,13 +27,13 @@ Next, we train populations of different sizes (6, 12, 18, 24, 30, 36) with each 
 
 ![training_curves](https://github.com/fdiazgon/pbt-keras/blob/assets/training_curves.png?raw=true)
 
-Each worker is represented by a line. Highlighted lines are an average of the top 5 workers at each step.
+Each worker is represented by a line. Highlighted lines are an average of the top 5 workers at each step. As we increase the size of the population, PBT is capable of finding better hyperparameters, thus increasing the performance gap between both approaches.
 
 In the next image, you can see how the hyperparameters change during training.
 
 ![hyperparameter_population](https://github.com/fdiazgon/pbt-keras/blob/assets/hyperparameter_population.png?raw=true)
 
-Figures represent l1 and l2 regularization respectively (in a log scale). You can see how they adopt lower values during training. The same can be visualized in the following figure, where we compare it against grid search:
+Figures represent l1 and l2 regularization respectively (in a log scale). You can see how they adopt lower values during training. The same can be visualized in the following figure, where we compare the total search space of PBT and grid search:
 
 ![hyperparameter_evolution](https://github.com/fdiazgon/pbt-keras/blob/assets/hyperparameter_evolution.png?raw=true)
 

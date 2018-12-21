@@ -10,9 +10,9 @@ from keras.utils import test_utils
 from pbt.hyperparameters import L1L2Mutable
 from pbt.members import Member
 
-DATA_DIM = 10
-BATCH_SIZE = 64
-STEPS_READY = 5
+data_dim = 10
+batch_size = 64
+steps_to_ready = 5
 
 session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
                               inter_op_parallelism_threads=1)
@@ -26,9 +26,9 @@ K.set_session(sess)
 
 def get_data():
     (x_train, y_train), _ = test_utils.get_test_data(
-        num_train=BATCH_SIZE,
-        num_test=BATCH_SIZE,
-        input_shape=(DATA_DIM,),
+        num_train=batch_size,
+        num_test=batch_size,
+        input_shape=(data_dim,),
         output_shape=(1,),
         classification=False)
     return x_train, y_train
@@ -36,11 +36,11 @@ def get_data():
 
 def get_test_model():
     np.random.seed(42)
+    hyperparameter1 = L1L2Mutable(l1=0.1, l2=1e-5)
+    hyperparameter2 = L1L2Mutable(l1=0.2, l2=1e-6)
     model = Sequential([
-        Dense(64, input_shape=(DATA_DIM,),
-              kernel_regularizer=L1L2Mutable(l1=0.1, l2=1e-5)),
-        Dense(1,
-              kernel_regularizer=L1L2Mutable(l1=0.2, l2=1e-6))
+        Dense(64, kernel_regularizer=hyperparameter1, input_shape=(data_dim,)),
+        Dense(1, kernel_regularizer=hyperparameter2)
     ])
     adam = Adam(lr=0.1)
     model.compile(optimizer=adam, loss='mean_squared_error')
@@ -48,7 +48,7 @@ def get_test_model():
 
 
 def get_test_member():
-    return Member(get_test_model, STEPS_READY)
+    return Member(get_test_model, steps_to_ready, tune_lr=True)
 
 
 def assert_list_arrays_equal(list_a, list_b):
@@ -106,7 +106,7 @@ def test_ready():
     """Trains one model for the required number of steps to be ready."""
     ma = get_test_member()
     assert not ma.ready()
-    for i in range(STEPS_READY):
+    for i in range(steps_to_ready):
         ma.step_on_batch(*get_data())
     assert ma.ready()
     ma.step_on_batch(*get_data())
