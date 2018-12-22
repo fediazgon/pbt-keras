@@ -40,7 +40,7 @@ def get_test_model():
         Dense(1, kernel_regularizer=hyperparameter2)
     ])
     adam = Adam(lr=0.1)
-    model.compile(optimizer=adam, loss='mean_squared_error')
+    model.compile(optimizer=adam, loss='mean_squared_error', metrics=['mse'])
     return model
 
 

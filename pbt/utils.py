@@ -42,7 +42,11 @@ def train_population(population, x, y, batch_size, steps,
     batch_generator = BatchGenerator(x_train, y_train, batch_size)
 
     results = defaultdict(lambda: [])
-    progbar = Progbar(steps, stateful_metrics=['min', 'max', 'mean'])
+    stateful_metrics = ['min_loss', 'max_loss', 'mean_loss']
+    for metric, _ in population[0].eval_metrics:
+        stateful_metrics.extend(
+            [m.format(metric) for m in ['min_{}', 'max_{}', 'mean_{}']])
+    progbar = Progbar(steps, stateful_metrics=stateful_metrics)
 
     for step in range(1, steps + 1):
         x, y = batch_generator.next()
@@ -66,6 +70,8 @@ def train_population(population, x, y, batch_size, steps,
                 results['step'].append(step)
                 results['loss'].append(loss)
                 results['loss_smoothed'].append(member.loss_smoothed())
+                for metric, value in member.eval_metrics:
+                    results[metric].append(value)
                 for h, v in member.get_hyperparameter_config().items():
                     results[h].append(v)
 
@@ -73,13 +79,16 @@ def train_population(population, x, y, batch_size, steps,
         all_losses = results['loss']
         recent_losses = all_losses[-population_size:]
         if recent_losses:
-            loss_stats = _statistics(recent_losses)
-            progbar.update(step, loss_stats)
+            metrics = _statistics(recent_losses, 'loss')
+            for metric, _ in population[0].eval_metrics:
+                metrics.extend(
+                    _statistics(results[metric][-population_size:], metric))
+            progbar.update(step, metrics)
 
     return pd.DataFrame(results)
 
 
-def _statistics(values):
+def _statistics(values, suffix):
     """Returns a List of tuples to use with Keras Progbar.
 
     Args:
@@ -89,7 +98,7 @@ def _statistics(values):
         Minimum, maximum and mean value for the given list.
 
     """
-    min_value = ('min', min(values))
-    max_value = ('max', max(values))
-    mean_value = ('mean', sum(values) / len(values))
+    min_value = ('min_{}'.format(suffix), min(values))
+    max_value = ('max_{}'.format(suffix), max(values))
+    mean_value = ('mean_{}'.format(suffix), sum(values) / len(values))
     return [min_value, max_value, mean_value]

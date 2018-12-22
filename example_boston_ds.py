@@ -47,7 +47,8 @@ def build_fn(data_dim, l1=1e-5, l2=1e-5):
                                kernel_regularizer=
                                pbt.hyperparameters.l1_l2(l1, l2)),
         ])
-        model.compile(optimizer='adam', loss='mean_squared_error')
+        model.compile(optimizer='adam', loss='mean_squared_error',
+                      metrics=['mse'])
         return model
 
     return _build_fn

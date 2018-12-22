@@ -41,7 +41,8 @@ class Member:
         self.steps_cycle = 0
         self.step_ready = steps_ready
 
-        self.current_loss = np.Inf
+        self.eval_loss = np.Inf
+        self.eval_metrics = [(metric, 0) for metric in self.model.metrics]
         self.recent_losses = deque(maxlen=10)
 
         self.hyperparameters = find_hyperparameters_model(self.model)
@@ -67,7 +68,8 @@ class Member:
             double: scalar train loss.
 
         """
-        train_loss = self.model.train_on_batch(x, y)
+        scalars = self.model.train_on_batch(x, y)
+        train_loss, _ = scalars[0], scalars[1:]
         self.steps_cycle += 1
         return train_loss
 
@@ -82,9 +84,14 @@ class Member:
             double: scalar evaluation loss.
 
         """
-        self.current_loss = self.model.test_on_batch(x, y)
-        self.recent_losses.append(self.current_loss)
-        return self.current_loss
+        scalars = self.model.test_on_batch(x, y)
+        eval_loss, eval_metrics = scalars[0], scalars[1:]
+        self.eval_loss = eval_loss
+        for i, (metric, _) in enumerate(self.eval_metrics):
+            self.eval_metrics[i] = (metric, eval_metrics[i])
+        self.recent_losses.append(self.eval_loss)
+        self.steps_cycle += 1
+        return self.eval_loss
 
     def test_on_batch(self, x, y):
         return self.model.test_on_batch(x, y)
@@ -126,12 +133,12 @@ class Member:
             True if the member was altered, False otherwise.
 
         """
-        losses = np.array([m.current_loss for m in population])
+        losses = np.array([m.eval_loss for m in population])
         # Lower is better. Top 20% means percentile 20 in losses
         threshold_best, threshold_worst = np.percentile(losses, (20, 80))
-        if self.current_loss > threshold_worst:
+        if self.eval_loss > threshold_worst:
             top_performers = [m for m in population
-                              if m.current_loss < threshold_best]
+                              if m.eval_loss < threshold_best]
             if top_performers:
                 self.replace_with(np.random.choice(top_performers))
             return True
