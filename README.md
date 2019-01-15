@@ -12,6 +12,7 @@ Population Based Training of Neural Network implemented in Keras.
 <p align="center">
   <a href="#getting-started">Getting started</a> •
   <a href="#using-your-own-model">Using your own model</a> •
+  <a href="#scientific-report">Scientific report</a> •
   <a href="#contributors-wanted">Contributors wanted</a> •
   <a href="#credits">Credits</a> •
   <a href="#license">License</a>
@@ -78,6 +79,10 @@ pbt.members.Member(build_fn(data_dim, **h), steps_ready=1e2)
 ```
 
 Where `**h` is just a dictionary with the hyperparameters (e.g., `{'l1': 1e-5, 'l2': 0}`). A Member exposes an interface to train the underlying model and change its hyperparameters. In the examples you can see how to use this interface to implement the PBT algorithm.
+
+## Scientific report
+
+A full [scientific report](report/pbt_scientific_writing.pdf) containing a set of qualitative results was redacted for the KTH course [II2202](https://www.kth.se/student/kurser/kurs/II2202?l=en) on "Research Methodology and Scientific Writing" in collaboration with [Giorgio Ruffa](https://github.com/xmooner).
 
 ## Contributors wanted
 
