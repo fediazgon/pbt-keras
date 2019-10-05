@@ -1,3 +1,10 @@
+try:
+    from tensorflow import __version__ as tf_version
+
+    TF = True
+except ImportError:
+    TF = False
+
 import keras
 import keras.backend as K
 import numpy as np

@@ -1,12 +1,22 @@
 from unittest.mock import call, patch
 
-import keras.backend as K
 import numpy as np
 import pytest
-from keras.layers import Dense
-from keras.models import Sequential
-from keras.optimizers import Adam
-from keras.utils import test_utils as k_test_utils
+
+from pbt import TF
+
+if TF:
+    from tensorflow.keras import backend as K
+    from tensorflow.keras.layers import Dense
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.optimizers import Adam
+    from tensorflow.keras.utils import test_utils as k_test_utils
+else:
+    from keras import backend as K
+    from keras.layers import Dense
+    from keras.models import Sequential
+    from keras.optimizers import Adam
+    from keras.utils import test_utils as k_test_utils
 
 from pbt.hyperparameters import L1L2Mutable, DropoutMutable
 from pbt.members import Member
