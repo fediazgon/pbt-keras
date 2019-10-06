@@ -42,7 +42,7 @@ class Member:
         self.step_ready = steps_ready
 
         self.eval_loss = np.Inf
-        self.eval_metrics = [(metric, 0) for metric in self.model.metrics]
+        self.eval_metrics = [(metric.name, 0) for metric in self.model.metrics]
         self.recent_losses = deque(maxlen=10)
 
         self.hyperparameters = find_hyperparameters_model(self.model)
