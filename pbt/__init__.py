@@ -7,7 +7,8 @@ from os import path
 
 import yaml
 
-__author__ = 'Giorgio Ruffa <gioruffa@gmail.com>'
+__author__ = 'Fernando Diaz <fediazgon@gmail.com>, Giorgio Ruffa <gioruffa@gmail.com>'
+__credits__ = 'Samuel Marks <@SamuelMarks>'
 __version__ = '0.0.1'
 
 

@@ -1,7 +1,8 @@
 numpy
 pandas
 # keras
-# tensorflow==1.14.0
+tensorflow==1.14.0
 pytest
 seaborn
 jupyter
+scikit-learn
