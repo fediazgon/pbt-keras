@@ -2,9 +2,17 @@ import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
-from keras import backend as K
-from keras.layers import Dropout
-from keras.regularizers import Regularizer
+
+from pbt import TF
+
+if TF:
+    from tensorflow.keras import backend as K
+    from tensorflow.keras.layers import Dropout
+    from tensorflow.keras.regularizers import Regularizer
+else:
+    from keras import backend as K
+    from keras.layers import Dropout
+    from keras.regularizers import Regularizer
 
 log = logging.getLogger(__name__)
 

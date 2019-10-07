@@ -1,11 +1,27 @@
 import numpy as np
 import pytest
-import tensorflow as tf
-from keras import backend as K
-from keras.layers import Dense
-from keras.models import Sequential
-from keras.optimizers import Adam
-from keras.utils import test_utils
+
+from pbt import TF
+
+if TF:
+    import tensorflow as tf
+    from tensorflow.keras import backend as K
+    from tensorflow.keras.layers import Dense
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.optimizers import Adam
+    from tensorflow.keras.utils import test_utils
+
+    session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
+                                  inter_op_parallelism_threads=1)
+    sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+else:
+    from keras import backend as K
+    from keras.layers import Dense
+    from keras.models import Sequential
+    from keras.optimizers import Adam
+    from keras.utils import test_utils
+
+    sess = K.get_session()
 
 from pbt.hyperparameters import L1L2Mutable
 from pbt.members import Member
@@ -14,9 +30,7 @@ data_dim = 10
 batch_size = 64
 steps_to_ready = 5
 
-session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
-                              inter_op_parallelism_threads=1)
-sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+
 K.set_session(sess)
 
 

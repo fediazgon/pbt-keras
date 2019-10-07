@@ -1,7 +1,14 @@
 from collections import defaultdict
 
 import pandas as pd
-from keras.utils.generic_utils import Progbar
+
+from pbt import TF
+
+if TF:
+    from tensorflow.python.keras.utils import Progbar
+else:
+    from keras.utils.generic_utils import Progbar
+
 from sklearn.model_selection import train_test_split
 
 
