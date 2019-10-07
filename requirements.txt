@@ -1,8 +1,8 @@
-numpy
-pandas
-# keras
+#Keras==2.3.0
+numpy==1.17.2
+pandas==0.25.1
+scikit-learn==0.21.3
 tensorflow==1.14.0
 pytest
 seaborn
 jupyter
-scikit-learn
